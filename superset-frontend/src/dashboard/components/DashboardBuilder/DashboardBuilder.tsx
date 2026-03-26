@@ -58,6 +58,7 @@ import {
 import FilterBar from 'src/dashboard/components/nativeFilters/FilterBar';
 import { useUiConfig } from 'src/components/UiConfigContext';
 import ResizableSidebar from 'src/components/ResizableSidebar';
+import ReportChatWidget from 'src/dashboard/components/ReportChat/ReportChatWidget';
 import {
   BUILDER_SIDEPANEL_WIDTH,
   CLOSED_FILTER_BAR_WIDTH,
@@ -710,6 +711,7 @@ const DashboardBuilder = () => {
           </StyledDashboardContent>
         </DashboardContentWrapper>
       </StyledContent>
+      <ReportChatWidget dashboardId={dashboardId} />
       {dashboardIsSaving && (
         <Loading
           css={css`

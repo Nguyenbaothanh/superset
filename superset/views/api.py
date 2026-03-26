@@ -36,6 +36,10 @@ from superset.utils import json
 from superset.utils.date_parser import get_since_until
 from superset.views.base import api, BaseSupersetView
 from superset.views.error_handling import handle_api_exception
+from superset.chatbot.report_chat import (
+    ReportChatMessage,
+    generate_report_chat_response,
+)
 
 if TYPE_CHECKING:
     from superset.common.query_context_factory import QueryContextFactory
@@ -125,6 +129,65 @@ class Api(BaseSupersetView):
         except (ValueError, TimeRangeParseFailError, TimeRangeAmbiguousError) as error:
             error_msg = {"message": _("Unexpected time range: %(error)s", error=error)}
             return self.json_response(error_msg, 400)
+
+    @api
+    @handle_api_exception
+    @has_access_api
+    @expose("/v1/report_chat/message/", methods=("POST",))
+    def report_chat_message(self) -> FlaskResponse:
+        """
+        Dashboard/report-scoped chatbot endpoint.
+
+        Expects JSON body:
+        {
+          "dashboardIdOrSlug": string|number,
+          "messages": [{"role": "user"|"assistant", "content": string}],
+          "max_slices": number (optional),
+          "chart_row_limit": number (optional)
+        }
+        """
+        body = request.get_json(silent=True) or {}
+        dashboard_id_or_slug = body.get("dashboardIdOrSlug") or body.get(
+            "dashboard_id_or_slug"
+        )
+        if dashboard_id_or_slug is None:
+            return self.json_response(
+                {"message": "Missing dashboardIdOrSlug."},
+                status=400,
+            )
+
+        max_slices = int(body.get("max_slices", 3))
+        chart_row_limit = int(body.get("chart_row_limit", 20))
+        max_tokens = int(body.get("max_tokens", 700))
+        temperature = float(body.get("temperature", 0.2))
+
+        raw_messages = body.get("messages", [])
+        messages: list[ReportChatMessage] = []
+        if isinstance(raw_messages, list):
+            for msg in raw_messages:
+                if not isinstance(msg, dict):
+                    continue
+                role = msg.get("role")
+                content = msg.get("content")
+                if role in {"user", "assistant"} and isinstance(content, str):
+                    messages.append(ReportChatMessage(role=role, content=content))
+
+        if not messages:
+            return self.json_response(
+                {"message": "Missing chat messages."},
+                status=400,
+            )
+
+        response_text = generate_report_chat_response(
+            dashboard_id_or_slug=str(dashboard_id_or_slug),
+            messages=messages,
+            max_slices=max_slices,
+            chart_row_limit=chart_row_limit,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+        return self.json_response({"result": {"response": response_text}})
 
     def get_query_context_factory(self) -> QueryContextFactory:
         if self.query_context_factory is None:
